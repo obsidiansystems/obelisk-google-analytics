@@ -1,0 +1,23 @@
+cabal-version: >=1.10
+
+name: obelisk-google-analytics
+version: 0.1.0.0
+synopsis: Embed Google analytics scripts in obelisk projects
+license: BSD3
+license-file: LICENSE
+author: Obsidian Systems LLC
+maintainer: tfsmalley@gmail.com
+category: Web
+build-type: Simple
+extra-source-files: CHANGELOG.md
+
+library
+  hs-source-dirs: src
+  exposed-modules: Obelisk.Frontend.GoogleAnalytics
+  build-depends:
+      base
+    , obelisk-executable-config-lookup
+    , reflex-dom-core
+    , text
+  default-language: Haskell2010
+  ghc-options: -Wall
