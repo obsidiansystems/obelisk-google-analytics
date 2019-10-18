@@ -37,17 +37,18 @@ googleAnalyticsFromConfig = getTrackingId >>= \case
 googleAnalytics :: (DomBuilder t m, Prerender js t m, PerformEvent t m, Routed t r m) => TrackingId -> m ()
 googleAnalytics trackingId = do
   let gtagSrc = "https://www.googletagmanager.com/gtag/js?id=" <> trackingId
-  elAttr "script" ("async" =: "" <> "src" =: gtagSrc) blank
+      escapedTrackingId = T.pack $ show trackingId
+  elAttr "script" ("async" =: "async" <> "src" =: gtagSrc) blank
   el "script" $ text $ T.unlines
     [ "window.dataLayer = window.dataLayer || [];"
     , "function gtag(){dataLayer.push(arguments);}"
     , "gtag('js', new Date());"
-    , "gtag('config', '" <> trackingId <> "');"
+    , "gtag('config', " <> escapedTrackingId <> ");"
     ]
   route <- askRoute
   prerender_ blank $ do
     performEvent_ $ ffor (updated route) $ \_ -> liftJSM $ do
-      void $ eval $ "gtag('config', '" <> trackingId <> "', { 'page_path': location.pathname, 'page_title': document.title });"
+      void $ eval $ "gtag('config', " <> escapedTrackingId <> ", { 'page_path': location.pathname, 'page_title': document.title });"
 
 -- | Get the tracking ID from the configuration. The config file should be
 -- located at 'trackingIdPath'.
