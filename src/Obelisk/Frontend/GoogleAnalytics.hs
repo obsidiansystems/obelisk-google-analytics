@@ -1,4 +1,10 @@
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Obelisk.Frontend.GoogleAnalytics
@@ -6,9 +12,16 @@ module Obelisk.Frontend.GoogleAnalytics
   , googleAnalytics
   , trackingIdPath
   , getTrackingId
+  , Analytics(..)
+  , GoogleAnalyticsT(..)
+  , GtagJSCall(..)
+  , runGoogleAnalyticsT
   ) where
 
-import Control.Monad (void)
+import Control.Monad
+import Control.Monad.Fix
+import Control.Monad.IO.Class
+import Control.Monad.Trans.Class
 import Data.Text (Text)
 import GHCJS.DOM.Types (liftJSM)
 import Language.Javascript.JSaddle.Evaluate (eval)
@@ -16,6 +29,76 @@ import Obelisk.Configs
 import Obelisk.Route.Frontend
 import Reflex.Dom.Core
 import qualified Data.Text as T
+import qualified Data.Aeson as Aeson
+import Data.Sequence (Seq)
+import qualified Data.Sequence as Seq
+import Language.Javascript.JSaddle.Types
+
+class Monad m => Analytics t w m | m -> w where
+  tellAnalytics :: Event t w -> m ()
+  -- ^ Tell analytics something, with asynchronous delivery.
+
+  -- tellAnalyticsSync :: w -> m ()
+  -- ^ Tell analytics something, with synchronous delivery.
+  --   This waits until the message is delivered before returning.
+
+  -- tellAnalyticsWithSync :: w -> m (STM Bool)
+  -- ^ Tell analytics something, with asynchronous delivery.
+  --   Returns a 'STM' action that becomes 'True' after delivery of this particular message.
+  --   This is the preferred way to implement synchronous delivery with timeout.
+
+  -- syncAnalytics :: m ()
+  -- ^ Synchronize on the delivery of every message outstanding at the time of the call.
+  --   This returns after all such messages have been delivered.
+
+  -- asyncAnalytics :: m (STM Bool)
+  -- ^ Returns an 'STM' action that becomes 'True' after all currently outstanding messages have been delivered.
+  --   This is an asynchronous variant of 'syncAnalytics', and the preferred way of doing a "global" sync with timeout.
+
+data GtagJSCall = GtagJSCall
+  { _GtagJSCall_Event_method :: !Text
+  , _GtagJSCall_Event_action :: !Text
+  , _GtagJSCall_Event_params :: !Aeson.Value
+  }
+
+newtype GoogleAnalyticsT t w m a = GoogleAnalyticsT
+  { unGoogleAnalyticsT :: EventWriterT t (Seq w) m a
+  } deriving (Functor, Applicative, Monad, MonadFix, MonadIO)  -- , MonadException, MonadAsyncException)
+
+instance MonadTrans (GoogleAnalyticsT t w) where
+  lift = GoogleAnalyticsT . lift
+
+runGoogleAnalyticsT
+  :: ( DomBuilder t m
+     , Prerender js t m
+     , MonadJSM (Performable m)
+     , PerformEvent t m
+     , Routed t r m
+     )
+  => Maybe Text  -- ^ tracking id,  see <https://analytics.google.com/analytics/web/>.  If 'Nothing', then disable Google Analytics.
+  -> (w -> GtagJSCall)
+  -> GoogleAnalyticsT t w m ()
+  -> m ()
+
+runGoogleAnalyticsT mTrackingId interpW (GoogleAnalyticsT m) = do
+  case mTrackingId of
+    Nothing -> return ()
+    Just trackingId -> do
+      googleAnalytics trackingId
+      (_, evt) <- runEventWriterT m
+      performEvent_ ( gtag <$> evt )
+  where
+    gtag ws = do
+      forM_ ws $ \w -> do
+        let call = interpW w
+            escape x = T.pack $ show $ x
+            escapedMethod = escape $ _GtagJSCall_Event_method call
+            escapedAction = escape $ _GtagJSCall_Event_action call
+            escapedParams = escape $ Aeson.encode $ _GtagJSCall_Event_method call
+        liftJSM $ void $ eval $ "gtag(" <> escapedMethod <> ", " <> escapedAction <> ", " <> escapedParams <> ");"
+
+instance (Reflex t, Monad m) => Analytics t w (GoogleAnalyticsT t w m) where
+  tellAnalytics =  GoogleAnalyticsT . tellEvent . (Seq.singleton <$>)
 
 -- | Config path for the tracking ID
 trackingIdPath :: Text
@@ -37,7 +120,7 @@ googleAnalyticsFromConfig = getTrackingId >>= \case
 googleAnalytics :: (DomBuilder t m, Prerender js t m, PerformEvent t m, Routed t r m) => TrackingId -> m ()
 googleAnalytics trackingId = do
   let gtagSrc = "https://www.googletagmanager.com/gtag/js?id=" <> trackingId
-      escapedTrackingId = T.pack $ show trackingId
+      escapedTrackingId = T.pack $ show trackingId   -- TODO: is this realy the correct way to escape?
   elAttr "script" ("async" =: "async" <> "src" =: gtagSrc) blank
   el "script" $ text $ T.unlines
     [ "window.dataLayer = window.dataLayer || [];"
