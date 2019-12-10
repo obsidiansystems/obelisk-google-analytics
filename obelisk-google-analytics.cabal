@@ -18,12 +18,17 @@ library
       base
     , aeson
     , containers
+    , exception-transformers
     , ghcjs-dom
     , jsaddle
+    , mtl
     , obelisk-executable-config-lookup
     , obelisk-route
+    , primitive
+    , ref-tf
+    , reflex
     , reflex-dom-core
-    , transformers
     , text
+    , transformers
   default-language: Haskell2010
   ghc-options: -Wall
