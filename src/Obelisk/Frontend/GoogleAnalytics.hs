@@ -34,7 +34,6 @@ import Control.Monad.Primitive
 import Control.Monad.Ref
 import Control.Monad.State.Strict
 import Data.Text (Text)
-import GHCJS.DOM.Types (liftJSM)
 import Language.Javascript.JSaddle.Evaluate (eval)
 import Obelisk.Configs
 import Obelisk.Route.Frontend
