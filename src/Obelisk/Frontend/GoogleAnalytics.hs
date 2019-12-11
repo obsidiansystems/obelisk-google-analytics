@@ -21,6 +21,8 @@ module Obelisk.Frontend.GoogleAnalytics
   , Analytics(..)
   , GoogleAnalyticsT(..)
   , GtagJSCall(..)
+  , gaClickEvent
+  , gaOutboundClickEvent
   , runGoogleAnalyticsT
   ) where
 
@@ -31,7 +33,6 @@ import Control.Monad.IO.Class
 import Control.Monad.Primitive
 import Control.Monad.Ref
 import Control.Monad.State.Strict
-import Control.Monad.Trans.Class
 import Data.Text (Text)
 import GHCJS.DOM.Types (liftJSM)
 import Language.Javascript.JSaddle.Evaluate (eval)
@@ -42,10 +43,10 @@ import qualified Data.Text as T
 import qualified Data.Aeson as Aeson
 import Data.Sequence (Seq)
 import qualified Data.Sequence as Seq
-import Language.Javascript.JSaddle.Types
-import qualified Data.Text.Lazy as TL
-import qualified Data.Text.Lazy.Encoding as TL
+import Language.Javascript.JSaddle
 import Reflex.Host.Class
+
+import qualified Data.HashMap.Strict as HMap
 
 class Monad m => Analytics t w m | m -> w where
   tellAnalytics :: Event t w -> m ()
@@ -69,9 +70,25 @@ class Monad m => Analytics t w m | m -> w where
   --   This is an asynchronous variant of 'syncAnalytics', and the preferred way of doing a "global" sync with timeout.
 
 data GtagJSCall = GtagJSCall
-  { _GtagJSCall_Event_method :: !Text
-  , _GtagJSCall_Event_action :: !Text
-  , _GtagJSCall_Event_params :: !Aeson.Value
+  { _gtagJSCall_method :: !Text
+  , _gtagJSCall_action :: !Text
+  , _gtagJSCall_params :: !Aeson.Value
+  }
+
+gaOutboundClickEvent :: Text -> GtagJSCall
+gaOutboundClickEvent = gaClickEvent "outbound"
+
+gaClickEvent :: Text -> Text -> GtagJSCall
+gaClickEvent category label = GtagJSCall
+  { _gtagJSCall_method = "event"
+  , _gtagJSCall_action = "click"
+  , _gtagJSCall_params =
+      Aeson.Object
+        (HMap.fromList
+          [ ("event_category", Aeson.String category)
+          , ("event_label", Aeson.String label)
+          ]
+        )
   }
 
 newtype GoogleAnalyticsT t w m a = GoogleAnalyticsT
@@ -136,12 +153,8 @@ runGoogleAnalyticsT interpW (GoogleAnalyticsT m) = do
   where
     gtag ws = do
       liftJSM $ forM_ ws $ \w -> do
-        let call = interpW w
-            escape x = T.pack $ show $ x
-            escapedMethod = escape $ _GtagJSCall_Event_method call
-            escapedAction = escape $ _GtagJSCall_Event_action call
-            escapedParams = TL.toStrict $ TL.decodeUtf8 $ Aeson.encode $ _GtagJSCall_Event_params call
-        void $ eval $ "gtag(" <> escapedMethod <> ", " <> escapedAction <> ", " <> escapedParams <> ");"
+        let c = interpW w
+        void $ jsg3 ("gtag"::Text) (_gtagJSCall_method c) (_gtagJSCall_action c) (_gtagJSCall_params c)
 
 instance (Reflex t, Monad m) => Analytics t w (GoogleAnalyticsT t w m) where
   tellAnalytics = GoogleAnalyticsT . tellEvent . (Seq.singleton <$>)
@@ -151,12 +164,6 @@ instance (Reflex t, Monad m, Analytics t w m) => Analytics t w (RoutedT t r m) w
 
 instance (Reflex t, Monad m, PostBuild t m) => PostBuild t (GoogleAnalyticsT t w m) where
   getPostBuild = GoogleAnalyticsT getPostBuild
-
-{--
-instance (Reflex t, Monad m, Prerender js t m) => Prerender js t (GoogleAnalyticsT t w m) where
-  type Client (GoogleAnalyticsT t w m) = GoogleAnalyticsT t w (Client m)
-  prerender server client = GoogleAnalyticsT (prerender (unGoogleAnalyticsT server) (unGoogleAnalyticsT client))
---}
 
 instance (MonadJSM (GoogleAnalyticsT t w (Client m)), Prerender js t m, Monad m, Reflex t) => Prerender js t (GoogleAnalyticsT t w m) where
   type Client (GoogleAnalyticsT t w m) = GoogleAnalyticsT t w (Client m)
@@ -223,8 +230,9 @@ googleAnalytics mTrackingId = do
     Nothing -> do
       el "script" $ text "function gtag(){return;}"
     Just trackingId -> do
+      -- TODO:  use proper escaping for tracking ID on url and fix the gtag('config' ... ) call
       let gtagSrc = "https://www.googletagmanager.com/gtag/js?id=" <> trackingId
-          escapedTrackingId = T.pack $ show trackingId   -- TODO: is this realy the correct way to escape?
+          escapedTrackingId = T.pack $ show trackingId
       elAttr "script" ("async" =: "async" <> "src" =: gtagSrc) blank
       el "script" $ text $ T.unlines
         [ "window.dataLayer = window.dataLayer || [];"
@@ -235,7 +243,9 @@ googleAnalytics mTrackingId = do
       route <- askRoute
       prerender_ blank $ do
         performEvent_ $ ffor (updated route) $ \_ -> liftJSM $ do
-          void $ eval $ "gtag('config', " <> escapedTrackingId <> ", { 'page_path': location.pathname, 'page_title': document.title });"
+          (Just pathname) <- fromJSVal =<< eval ("location.pathname"::Text)
+          (Just docTitle) <- fromJSVal =<< eval ("document.title"::Text)
+          void $ jsg3 ("gtag"::Text) ("config"::Text) trackingId $ toJSVal (Aeson.Object (HMap.fromList [("page_path", Aeson.String pathname), ("page_title", Aeson.String docTitle)]))
 
 -- | Get the tracking ID from the configuration. The config file should be
 -- located at 'trackingIdPath'.
