@@ -6,7 +6,7 @@ synopsis: Embed Google analytics scripts in obelisk projects
 license: BSD3
 license-file: LICENSE
 author: Obsidian Systems LLC
-maintainer: tfsmalley@gmail.com
+maintainer: maintainer@obsidian.systems
 category: Web
 build-type: Simple
 extra-source-files: CHANGELOG.md
