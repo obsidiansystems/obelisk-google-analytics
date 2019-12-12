@@ -3,16 +3,12 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
-
-{-# OPTIONS_GHC -Wall #-} -- -Werror #-}
-
 module Obelisk.Frontend.GoogleAnalytics
   ( googleAnalyticsFromConfig
   , googleAnalytics
@@ -224,9 +220,9 @@ googleAnalyticsFromConfig = getTrackingId >>= googleAnalytics
 
 -- | Embed Google analytics scripts with the given tracking ID.
 googleAnalytics :: (DomBuilder t m, Prerender js t m, Routed t r m) => Maybe TrackingId -> m ()
-googleAnalytics mTrackingId = do
+googleAnalytics mTrackingId =
   case mTrackingId of
-    Nothing -> do
+    Nothing ->
       el "script" $ text "function gtag(){return;}"
     Just trackingId -> do
       -- TODO:  use proper escaping for tracking ID on url and fix the gtag('config' ... ) call
@@ -240,7 +236,7 @@ googleAnalytics mTrackingId = do
         , "gtag('config', " <> escapedTrackingId <> ");"
         ]
       route <- askRoute
-      prerender_ blank $ do
+      prerender_ blank $
         performEvent_ $ ffor (updated route) $ \_ -> liftJSM $ do
           (Just pathname) <- fromJSVal =<< eval ("location.pathname"::Text)
           (Just docTitle) <- fromJSVal =<< eval ("document.title"::Text)
