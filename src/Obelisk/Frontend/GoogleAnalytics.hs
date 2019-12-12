@@ -1,7 +1,6 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -43,15 +42,15 @@ import Reflex.Host.Class
 
 import qualified Data.HashMap.Strict as HMap
 
-class Monad m => Analytics t w m | m -> w where
-  tellAnalytics :: Event t w -> m ()
+class Monad m => Analytics t m where
+  tellAnalytics :: Event t GtagJSCall -> m ()
   -- ^ Tell analytics something, with asynchronous delivery.
 
   -- tellAnalyticsSync :: Event t w -> m ()
   -- ^ Tell analytics something, with synchronous delivery.
   --   This waits until the message is delivered before returning.
 
-  -- tellAnalyticsWithSync :: Event t w -> m (STM Bool)    <- this type is conceptually flawed
+  -- tellAnalyticsWithSync :: Event t w -> m (Dynamic t Bool)
   -- ^ Tell analytics something, with asynchronous delivery.
   --   Returns a 'STM' action that becomes 'True' after delivery of this particular message.
   --   This is the preferred way to implement synchronous delivery with timeout.
@@ -60,7 +59,7 @@ class Monad m => Analytics t w m | m -> w where
   -- ^ Synchronize on the delivery of every message outstanding at the time of the call.
   --   This returns after all such messages have been delivered.
 
-  -- asyncAnalytics :: m (STM Bool)
+  -- asyncAnalytics :: m (Dynamic t Bool)
   -- ^ Returns an 'STM' action that becomes 'True' after all currently outstanding messages have been delivered.
   --   This is an asynchronous variant of 'syncAnalytics', and the preferred way of doing a "global" sync with timeout.
 
@@ -86,15 +85,15 @@ gaClickEvent category label = GtagJSCall
         )
   }
 
-newtype GoogleAnalyticsT t w m a = GoogleAnalyticsT
-  { unGoogleAnalyticsT :: EventWriterT t (Seq w) m a
+newtype GoogleAnalyticsT t m a = GoogleAnalyticsT
+  { unGoogleAnalyticsT :: EventWriterT t (Seq GtagJSCall) m a
   } deriving (Functor, Applicative, Monad, MonadFix, MonadIO, MonadException, MonadAsyncException)
 
-instance (Monad m, RouteToUrl r m) => RouteToUrl r (GoogleAnalyticsT t w m)
+instance (Monad m, RouteToUrl r m) => RouteToUrl r (GoogleAnalyticsT t m)
 
-instance NotReady t m => NotReady t (GoogleAnalyticsT t w m)
+instance NotReady t m => NotReady t (GoogleAnalyticsT t m)
 
-instance (Reflex t, Adjustable t m, MonadHold t m) => Adjustable t (GoogleAnalyticsT t w m) where
+instance (Reflex t, Adjustable t m, MonadHold t m) => Adjustable t (GoogleAnalyticsT t m) where
   runWithReplace (GoogleAnalyticsT m) e =
     GoogleAnalyticsT (runWithReplace m (unGoogleAnalyticsT <$> e))
   traverseIntMapWithKeyWithAdjust f dm0 dm' =
@@ -104,10 +103,10 @@ instance (Reflex t, Adjustable t m, MonadHold t m) => Adjustable t (GoogleAnalyt
   traverseDMapWithKeyWithAdjustWithMove f dm0 dm' =
     GoogleAnalyticsT (traverseDMapWithKeyWithAdjustWithMove (\x y -> unGoogleAnalyticsT (f x y)) dm0 dm')
 
-instance (Monad m, Routed t r m) => Routed t r (GoogleAnalyticsT t w m)
+instance (Monad m, Routed t r m) => Routed t r (GoogleAnalyticsT t m)
 
-instance (DomBuilder t m, MonadHold t m, MonadFix m) => DomBuilder t (GoogleAnalyticsT t w m) where
-  type DomBuilderSpace (GoogleAnalyticsT t w m) = DomBuilderSpace m
+instance (DomBuilder t m, MonadHold t m, MonadFix m) => DomBuilder t (GoogleAnalyticsT t m) where
+  type DomBuilderSpace (GoogleAnalyticsT t m) = DomBuilderSpace m
   textNode = liftTextNode
   commentNode = liftCommentNode
   element elementTag cfg (GoogleAnalyticsT child) = GoogleAnalyticsT $ element elementTag cfg child
@@ -117,81 +116,83 @@ instance (DomBuilder t m, MonadHold t m, MonadFix m) => DomBuilder t (GoogleAnal
   placeRawElement = lift . placeRawElement
   wrapRawElement e = lift . wrapRawElement e
 
-instance MonadTrans (GoogleAnalyticsT t w) where
+instance MonadTrans (GoogleAnalyticsT t) where
   lift = GoogleAnalyticsT . lift
 
-instance (Reflex t, Monad m, SetRoute t r m) => SetRoute t r (GoogleAnalyticsT t w m)
+instance (Reflex t, Monad m, SetRoute t r m) => SetRoute t r (GoogleAnalyticsT t m)
 
-instance MonadReflexCreateTrigger t m => MonadReflexCreateTrigger t (GoogleAnalyticsT t w m) where
+instance MonadReflexCreateTrigger t m => MonadReflexCreateTrigger t (GoogleAnalyticsT t m) where
   newEventWithTrigger = lift . newEventWithTrigger
   newFanEventWithTrigger f = lift $ newFanEventWithTrigger f
 
-instance PrimMonad m => PrimMonad (GoogleAnalyticsT t w m) where
-  type PrimState (GoogleAnalyticsT t w m) = PrimState m
+instance PrimMonad m => PrimMonad (GoogleAnalyticsT t m) where
+  type PrimState (GoogleAnalyticsT t m) = PrimState m
   primitive = lift . primitive
 
 #ifndef ghcjs_HOST_OS
-deriving instance MonadJSM m => MonadJSM (GoogleAnalyticsT t r m)
+deriving instance MonadJSM m => MonadJSM (GoogleAnalyticsT t m)
 #endif
 
+
+-- | Run a widget with Google Analytics tracking functionality.
+-- NB: It is assumed that 'googleAnalytics' has already been set up
+-- in the document head!
 runGoogleAnalyticsT
   :: ( DomBuilder t m
      , Prerender js t m
      )
-  => (w -> GtagJSCall)
-  -> GoogleAnalyticsT t w m a
+  => GoogleAnalyticsT t m a
   -> m a
-runGoogleAnalyticsT interpW (GoogleAnalyticsT m) = do
+runGoogleAnalyticsT (GoogleAnalyticsT m) = do
   (a, evt) <- runEventWriterT m
   prerender_ blank $ performEvent_ ( fmap gtag evt )
   return a
   where
-    gtag ws = do
-      liftJSM $ forM_ ws $ \w -> do
-        let c = interpW w
+    gtag ws =
+      liftJSM $ forM_ ws $ \c ->
         void $ jsg3 ("gtag"::Text) (_gtagJSCall_method c) (_gtagJSCall_action c) (_gtagJSCall_params c)
 
-instance (Reflex t, Monad m) => Analytics t w (GoogleAnalyticsT t w m) where
+instance (Reflex t, Monad m) => Analytics t (GoogleAnalyticsT t m) where
   tellAnalytics = GoogleAnalyticsT . tellEvent . (Seq.singleton <$>)
 
-instance (Reflex t, Monad m, Analytics t w m) => Analytics t w (RoutedT t r m) where
+instance (Reflex t, Monad m, Analytics t m) => Analytics t (RoutedT t r m) where
   tellAnalytics = lift . tellAnalytics
 
-instance (Reflex t, Monad m, PostBuild t m) => PostBuild t (GoogleAnalyticsT t w m) where
+instance (Reflex t, Monad m, PostBuild t m) => PostBuild t (GoogleAnalyticsT t m) where
   getPostBuild = GoogleAnalyticsT getPostBuild
 
-instance (MonadJSM (GoogleAnalyticsT t w (Client m)), Prerender js t m, Monad m, Reflex t) => Prerender js t (GoogleAnalyticsT t w m) where
-  type Client (GoogleAnalyticsT t w m) = GoogleAnalyticsT t w (Client m)
-  prerender server client = do
+instance (MonadJSM (GoogleAnalyticsT t (Client m)), Prerender js t m, Monad m, Reflex t) => Prerender js t (GoogleAnalyticsT t m) where
+  type Client (GoogleAnalyticsT t m) = GoogleAnalyticsT t (Client m)
+  prerender server client =
     GoogleAnalyticsT $ prerender (unGoogleAnalyticsT server) (unGoogleAnalyticsT client)
 
-instance MonadRef m => MonadRef (GoogleAnalyticsT t w m) where
-  type Ref (GoogleAnalyticsT t w m) = Ref m
+instance MonadRef m => MonadRef (GoogleAnalyticsT t m) where
+  type Ref (GoogleAnalyticsT t m) = Ref m
   newRef = lift . newRef
   readRef = lift . readRef
   writeRef r = lift . writeRef r
 
-instance PerformEvent t m => PerformEvent t (GoogleAnalyticsT t w m) where
-  type Performable (GoogleAnalyticsT t w m) = Performable m
+instance PerformEvent t m => PerformEvent t (GoogleAnalyticsT t m) where
+  type Performable (GoogleAnalyticsT t m) = Performable m
   performEvent_ = lift . performEvent_
   performEvent = lift . performEvent
 
-deriving instance DomRenderHook t m => DomRenderHook t (GoogleAnalyticsT t w m)
-instance HasDocument m => HasDocument (GoogleAnalyticsT t w m)
+deriving instance DomRenderHook t m => DomRenderHook t (GoogleAnalyticsT t m)
+instance HasDocument m => HasDocument (GoogleAnalyticsT t m)
 
-instance TriggerEvent t m => TriggerEvent t (GoogleAnalyticsT t w m) where
+instance TriggerEvent t m => TriggerEvent t (GoogleAnalyticsT t m) where
   newTriggerEvent = lift newTriggerEvent
   newTriggerEventWithOnComplete = lift newTriggerEventWithOnComplete
   newEventWithLazyTriggerWithOnComplete = lift . newEventWithLazyTriggerWithOnComplete
 
-instance HasJSContext m => HasJSContext (GoogleAnalyticsT t w m) where
-  type JSContextPhantom (GoogleAnalyticsT t w m) = JSContextPhantom m
+instance HasJSContext m => HasJSContext (GoogleAnalyticsT t m) where
+  type JSContextPhantom (GoogleAnalyticsT t m) = JSContextPhantom m
   askJSContext = lift askJSContext
 
-instance MonadSample t m => MonadSample t (GoogleAnalyticsT t w m) where
+instance MonadSample t m => MonadSample t (GoogleAnalyticsT t m) where
   sample = lift . sample
 
-instance MonadHold t m => MonadHold t (GoogleAnalyticsT t w m) where
+instance MonadHold t m => MonadHold t (GoogleAnalyticsT t m) where
   {-# INLINABLE hold #-}
   hold v0 = lift . hold v0
   {-# INLINABLE holdDyn #-}
@@ -203,8 +204,8 @@ instance MonadHold t m => MonadHold t (GoogleAnalyticsT t w m) where
   {-# INLINABLE headE #-}
   headE = lift . headE
 
-instance HasJS x m => HasJS x (GoogleAnalyticsT t w m) where
-  type JSX (GoogleAnalyticsT t w m) = JSX m
+instance HasJS x m => HasJS x (GoogleAnalyticsT t m) where
+  type JSX (GoogleAnalyticsT t m) = JSX m
   liftJS = lift . liftJS
 
 type TrackingId = Text
