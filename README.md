@@ -6,7 +6,7 @@ This library is a thin binding to `gtag.js`,  one of several offically supported
 
 ## Configuration
 
-Go to https://analytics.google.com/analytics/web/, and set up an account if needed.  From there, you can find a copy-and-pastable tracking ID you want to use for a given deployment, by clicking on the "Admin" settings in the lower right of the page,  then selecting a Property at the top of the middle column,  and then clicking "Property Settings".  This tracking ID needs be put into a file located at:
+Go to https://analytics.google.com/analytics/web/, and set up an account if needed.  From there, you can find a copy-and-pastable tracking ID you want to use for a given deployment, by clicking on the `Admin` settings in the lower right of the page,  then selecting a `Property` at the top of the middle column,  and then clicking `Property Settings` for your selected property.  This tracking ID needs be put into a file located at:
 
 ```
 config/frontend/google/analytics/tracking-id
