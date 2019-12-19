@@ -16,7 +16,21 @@ Note that if this file doesn't exist,  analytics will be disabled, and no events
 
 ## Use in a Reflex Project
 
-Simply include the `googleAnalytics` widget at the top of the page head; if you want to add additional events on the body,  then put `mapRoutedT runGoogleAnalyticsT` around your `_frontend_body`
+### Importing analytics
+
+Simply include the `googleAnalytics` widget at the beginning of your `_frontend_head`:  this will automatically capture the current route being viewed.
+
+```
+frontend :: Frontend (R Route)
+frontend = Frontend
+  { _frontend_head = googleAnalytics >> your_frontend_head
+  , _frontend_body = your_frontend_body
+  }
+```
+
+### Adding additional events
+
+In addition the previous section, also put `mapRoutedT runGoogleAnalyticsT` around your `_frontend_body`.  This will allow you to use `tellAnalytics` anywhere on the site.
 
 ```
 frontend :: Frontend (R Route)
@@ -24,5 +38,14 @@ frontend = Frontend
   { _frontend_head = googleAnalytics >> your_frontend_head
   , _frontend_body = mapRoutedT runGoogleAnalyticsT $ your_frontend_body
   }
+```
 
+We use `mapRoutedT` in order to put the `GoogleAnalyticsT` underneath the `RouteT`,  and avoid having to generalize routing functions such as `subRoute_` in tricky ways.  Here's an example of a widget that opens a external link in new window,  and sends an analytics event when it happens:
+
+```
+extLinkAttr :: forall t m a. (DomBuilder t m, Analytics t m) => Map Text Text -> Text -> m a -> m a
+extLinkAttr attrs href m = do
+  (e,a) <- elAttr' "a" ("href" =: href <> attrs <> "target" =: "_blank" <> "rel" =: "noopener") m
+  tellAnalytics (gaOutboundClickEvent href <$ (domEvent Click e :: Event t ()))
+  return a
 ```
