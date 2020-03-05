@@ -30,7 +30,7 @@ frontend = Frontend
 
 ### Adding additional events
 
-In addition the previous section, also put `mapRoutedT runGoogleAnalyticsT` around your `_frontend_body`.  This will allow you to use `tellAnalytics` anywhere on the site.
+In addition to the previous section, also put `mapRoutedT runGoogleAnalyticsT` around your `_frontend_body`.  This will allow you to use `tellAnalytics` anywhere on the site.
 
 ```
 frontend :: Frontend (R Route)
@@ -40,7 +40,7 @@ frontend = Frontend
   }
 ```
 
-We use `mapRoutedT` in order to put the `GoogleAnalyticsT` underneath the `RouteT`,  and avoid having to generalize routing functions such as `subRoute_` in tricky ways.  Here's an example of a widget that opens a external link in new window,  and sends an analytics event when it happens:
+We use `mapRoutedT` in order to put the `GoogleAnalyticsT` underneath the `RouteT`,  and avoid having to generalize routing functions such as `subRoute_` in tricky ways.  Here's an example of a widget that opens an external link in new window,  and sends an analytics event when it happens:
 
 ```
 extLinkAttr :: forall t m a. (DomBuilder t m, Analytics t m) => Map Text Text -> Text -> m a -> m a
