@@ -121,6 +121,8 @@ instance MonadTrans (GoogleAnalyticsT t) where
 
 instance (Reflex t, Monad m, SetRoute t r m) => SetRoute t r (GoogleAnalyticsT t m)
 
+instance HasConfigs m => HasConfigs (GoogleAnalyticsT t m)
+
 instance MonadReflexCreateTrigger t m => MonadReflexCreateTrigger t (GoogleAnalyticsT t m) where
   newEventWithTrigger = lift . newEventWithTrigger
   newFanEventWithTrigger f = lift $ newFanEventWithTrigger f
