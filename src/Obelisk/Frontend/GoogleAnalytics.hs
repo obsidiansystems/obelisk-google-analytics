@@ -141,7 +141,7 @@ deriving instance MonadJSM m => MonadJSM (GoogleAnalyticsT t m)
 -- in the document head!
 runGoogleAnalyticsT
   :: ( DomBuilder t m
-     , Prerender js t m
+     , Prerender t m
      )
   => GoogleAnalyticsT t m a
   -> m a
@@ -163,7 +163,7 @@ instance (Reflex t, Monad m, Analytics t m) => Analytics t (RoutedT t r m) where
 instance (Reflex t, Monad m, PostBuild t m) => PostBuild t (GoogleAnalyticsT t m) where
   getPostBuild = GoogleAnalyticsT getPostBuild
 
-instance (MonadJSM (GoogleAnalyticsT t (Client m)), Prerender js t m, Monad m, Reflex t) => Prerender js t (GoogleAnalyticsT t m) where
+instance (MonadJSM (GoogleAnalyticsT t (Client m)), Prerender t m, Monad m, Reflex t) => Prerender t (GoogleAnalyticsT t m) where
   type Client (GoogleAnalyticsT t m) = GoogleAnalyticsT t (Client m)
   prerender server client =
     GoogleAnalyticsT $ prerender (unGoogleAnalyticsT server) (unGoogleAnalyticsT client)
@@ -187,10 +187,6 @@ instance TriggerEvent t m => TriggerEvent t (GoogleAnalyticsT t m) where
   newTriggerEventWithOnComplete = lift newTriggerEventWithOnComplete
   newEventWithLazyTriggerWithOnComplete = lift . newEventWithLazyTriggerWithOnComplete
 
-instance HasJSContext m => HasJSContext (GoogleAnalyticsT t m) where
-  type JSContextPhantom (GoogleAnalyticsT t m) = JSContextPhantom m
-  askJSContext = lift askJSContext
-
 instance MonadSample t m => MonadSample t (GoogleAnalyticsT t m) where
   sample = lift . sample
 
@@ -206,10 +202,6 @@ instance MonadHold t m => MonadHold t (GoogleAnalyticsT t m) where
   {-# INLINABLE headE #-}
   headE = lift . headE
 
-instance HasJS x m => HasJS x (GoogleAnalyticsT t m) where
-  type JSX (GoogleAnalyticsT t m) = JSX m
-  liftJS = lift . liftJS
-
 type TrackingId = Text
 
 -- | Config path for the tracking ID
@@ -218,11 +210,11 @@ trackingIdPath = "frontend/google/analytics/tracking-id"
 
 -- | Embed Google analytics scripts. This function will throw if the tracking ID
 -- config is missing.
-googleAnalyticsFromConfig :: (HasConfigs m, Prerender js t m, DomBuilder t m, Routed t r m) => m ()
+googleAnalyticsFromConfig :: (HasConfigs m, Prerender t m, DomBuilder t m, Routed t r m) => m ()
 googleAnalyticsFromConfig = getTrackingId >>= googleAnalytics
 
 -- | Embed Google analytics scripts with the given tracking ID.
-googleAnalytics :: (DomBuilder t m, Prerender js t m, Routed t r m) => Maybe TrackingId -> m ()
+googleAnalytics :: (DomBuilder t m, Prerender t m, Routed t r m) => Maybe TrackingId -> m ()
 googleAnalytics mTrackingId =
   case mTrackingId of
     Nothing ->
