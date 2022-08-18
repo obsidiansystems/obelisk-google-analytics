@@ -1,7 +1,7 @@
 cabal-version: >=1.10
 
 name: obelisk-google-analytics
-version: 0.1.0.0
+version: 0.2.0.0
 synopsis: Embed Google analytics scripts in obelisk projects
 license: BSD3
 license-file: LICENSE
