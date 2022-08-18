@@ -27,7 +27,7 @@ library
     , primitive
     , ref-tf
     , reflex
-    , reflex-dom-core
+    , reflex-dom-core >= 0.7
     , text
     , transformers
     , unordered-containers
