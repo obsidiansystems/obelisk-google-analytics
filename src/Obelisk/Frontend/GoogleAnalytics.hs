@@ -40,7 +40,7 @@ import qualified Data.Sequence as Seq
 import Language.Javascript.JSaddle
 import Reflex.Host.Class
 
-import qualified Data.HashMap.Strict as HMap
+import qualified Data.Aeson.KeyMap as KeyMap
 
 class Monad m => Analytics t m where
   tellAnalytics :: Event t GtagJSCall -> m ()
@@ -78,7 +78,7 @@ gaClickEvent category label = GtagJSCall
   , _gtagJSCall_action = "click"
   , _gtagJSCall_params =
       Aeson.Object
-        (HMap.fromList
+        (KeyMap.fromList
           [ ("event_category", Aeson.String category)
           , ("event_label", Aeson.String label)
           ]
@@ -235,7 +235,7 @@ googleAnalytics mTrackingId =
         performEvent_ $ ffor (updated route) $ \_ -> liftJSM $ do
           (Just pathname) <- fromJSVal =<< eval ("location.pathname"::Text)
           (Just docTitle) <- fromJSVal =<< eval ("document.title"::Text)
-          void $ jsg3 ("gtag"::Text) ("config"::Text) trackingId $ toJSVal (Aeson.Object (HMap.fromList [("page_path", Aeson.String pathname), ("page_title", Aeson.String docTitle)]))
+          void $ jsg3 ("gtag"::Text) ("config"::Text) trackingId $ toJSVal (Aeson.Object (KeyMap.fromList [("page_path", Aeson.String pathname), ("page_title", Aeson.String docTitle)]))
 
 -- | Get the tracking ID from the configuration. The config file should be
 -- located at 'trackingIdPath'.

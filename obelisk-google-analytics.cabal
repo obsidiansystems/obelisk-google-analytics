@@ -16,7 +16,7 @@ library
   exposed-modules: Obelisk.Frontend.GoogleAnalytics
   build-depends:
       base
-    , aeson
+    , aeson >= 2.0.0.0
     , containers
     , exception-transformers
     , ghcjs-dom
