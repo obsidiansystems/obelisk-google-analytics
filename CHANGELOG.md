@@ -2,6 +2,8 @@
 
 ## 0.2.0.0
 
+* Support aeson 2.0.0.0
+
 * Update for compatibility with reflex-dom-core 0.7
 
 ## 0.1.0.0
