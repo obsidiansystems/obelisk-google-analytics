@@ -1,7 +1,7 @@
 cabal-version: >=1.10
 
 name: obelisk-google-analytics
-version: 0.1.0.0
+version: 0.2.0.0
 synopsis: Embed Google analytics scripts in obelisk projects
 license: BSD3
 license-file: LICENSE
@@ -16,7 +16,7 @@ library
   exposed-modules: Obelisk.Frontend.GoogleAnalytics
   build-depends:
       base
-    , aeson
+    , aeson >= 2.0.0.0
     , containers
     , exception-transformers
     , ghcjs-dom
@@ -27,7 +27,7 @@ library
     , primitive
     , ref-tf
     , reflex
-    , reflex-dom-core
+    , reflex-dom-core >= 0.7
     , text
     , transformers
     , unordered-containers
